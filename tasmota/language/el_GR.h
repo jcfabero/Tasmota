@@ -198,6 +198,8 @@
 #define D_WEIGHT "Βάρος"
 #define D_WARMLIGHT "Θερμό"
 #define D_WEB_SERVER "Διακομιστής Web"
+#define D_SOC "State of Charge"
+#define D_SOH "State of Health"
 
 // tasmota.ino
 #define D_WARNING_MINIMAL_VERSION "ΠΡΟΕΙΔΟΠΟΙΗΣΗ Αυτή η έκδοση δεν αποθηκεύει τις ρυθμίσεις"
@@ -326,6 +328,8 @@
 #define D_WEB_ADMIN_PASSWORD "Κωδικός διαχειριστή"
 #define D_MQTT_ENABLE "Ενεργοποίηση MQTT"
 #define D_MQTT_TLS_ENABLE "MQTT TLS"
+#define D_HTTP_API "HTTP API"
+#define D_HTTP_API_ENABLE "Ενεργοποίηση HTTP API"
 #define D_FRIENDLY_NAME "Φιλική ονομασία"
 #define D_BELKIN_WEMO "Belkin WeMo"
 #define D_HUE_BRIDGE "Hue Bridge"
@@ -706,6 +710,7 @@
 #define D_SENSOR_CSE7761_RX    "CSE7761 Rx"
 #define D_SENSOR_CSE7766_TX    "CSE7766 Tx"
 #define D_SENSOR_CSE7766_RX    "CSE7766 Rx"
+#define D_SENSOR_BL0939_RX     "BL0939 Rx"
 #define D_SENSOR_PN532_TX      "PN532 Tx"
 #define D_SENSOR_PN532_RX      "PN532 Rx"
 #define D_SENSOR_SM16716_CLK   "SM16716 CLK"
@@ -831,6 +836,10 @@
 #define D_SENSOR_ZEROCROSS     "ZC Pulse"
 #define D_SENSOR_HALLEFFECT    "HallEffect"
 #define D_SENSOR_EPD_DATA      "EPD Data"
+#define D_SENSOR_MCP2515_CS    "MCP2515 CS"
+#define D_SENSOR_HRG15_RX      "HRG15 Rx"
+#define D_SENSOR_HRG15_TX      "HRG15 Tx"
+#define D_SENSOR_VINDRIKTNING_RX "VINDRIKTNING"
 
 // Units
 #define D_UNIT_AMPERE "A"

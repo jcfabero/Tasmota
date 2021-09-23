@@ -28,6 +28,7 @@
 #include "ir_Fujitsu.h"
 #include "ir_Haier.h"
 #include "ir_Hitachi.h"
+#include "ir_Kelon.h"
 #include "ir_Kelvinator.h"
 #include "ir_LG.h"
 #include "ir_Midea.h"
@@ -202,6 +203,9 @@ bool IRac::isProtocolSupported(const decode_type_t protocol) {
 #if SEND_HAIER_AC
     case decode_type_t::HAIER_AC:
 #endif
+#if SEND_HAIER_AC176
+    case decode_type_t::HAIER_AC176:
+#endif  // SEND_HAIER_AC176
 #if SEND_HAIER_AC_YRW02
     case decode_type_t::HAIER_AC_YRW02:
 #endif
@@ -216,6 +220,9 @@ bool IRac::isProtocolSupported(const decode_type_t protocol) {
 #endif
 #if SEND_HITACHI_AC424
     case decode_type_t::HITACHI_AC424:
+#endif
+#if SEND_KELON
+    case decode_type_t::KELON:
 #endif
 #if SEND_KELVINATOR
     case decode_type_t::KELVINATOR:
@@ -255,6 +262,9 @@ bool IRac::isProtocolSupported(const decode_type_t protocol) {
 #if SEND_SANYO_AC
     case decode_type_t::SANYO_AC:
 #endif
+#if SEND_SANYO_AC88
+    case decode_type_t::SANYO_AC88:
+#endif
 #if SEND_SHARP_AC
     case decode_type_t::SHARP_AC:
 #endif
@@ -276,6 +286,9 @@ bool IRac::isProtocolSupported(const decode_type_t protocol) {
 #if SEND_TROTEC
     case decode_type_t::TROTEC:
 #endif
+#if SEND_TROTEC_3550
+    case decode_type_t::TROTEC_3550:
+#endif  // SEND_TROTEC_3550
 #if SEND_TRUMA
     case decode_type_t::TRUMA:
 #endif  // SEND_TRUMA
@@ -285,16 +298,8 @@ bool IRac::isProtocolSupported(const decode_type_t protocol) {
 #if SEND_VOLTAS
     case decode_type_t::VOLTAS:
 #endif
-#if SEND_WHIRLPOOL_AC
     case decode_type_t::WHIRLPOOL_AC:
-#endif
-// Note: Compiler Warning is disabled because someone could disable all
-//       the protocols before this and it is then unreachable.
-//       "-Wswitch-unreachable" not used as it appears to be an unknown option.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wall"
       return true;
-#pragma GCC diagnostic pop
     default:
       return false;
   }
@@ -458,6 +463,13 @@ void IRac::coolix(IRCoolixAC *ac,
   // No Clock setting available.
   // No Econo setting available.
   // No Quiet setting available.
+  ac->send();  // Send the state, which will also power on the unit.
+  // The following are all options/settings that create their own special
+  // messages. Often they only make sense to be sent after the unit is turned
+  // on. For instance, assuming a person wants to have the a/c on and in turbo
+  // mode. If we send the turbo message, it is ignored if the unit is off.
+  // Hence we send the special mode/setting messages after a normal message
+  // which will turn on the device.
   if (swingv != stdAc::swingv_t::kOff || swingh != stdAc::swingh_t::kOff) {
     // Swing has a special command that needs to be sent independently.
     ac->setSwing();
@@ -468,7 +480,7 @@ void IRac::coolix(IRCoolixAC *ac,
     ac->setTurbo();
     ac->send();
   }
-  if (sleep > 0) {
+  if (sleep >= 0) {
     // Sleep has a special command that needs to be sent independently.
     ac->setSleep();
     ac->send();
@@ -483,7 +495,6 @@ void IRac::coolix(IRCoolixAC *ac,
     ac->setClean();
     ac->send();
   }
-  ac->send();
 }
 #endif  // SEND_COOLIX
 
@@ -1075,6 +1086,40 @@ void IRac::haier(IRHaierAC *ac,
 }
 #endif  // SEND_HAIER_AC
 
+#if SEND_HAIER_AC176
+/// Send a Haier 176 bit A/C message with the supplied settings.
+/// @param[in, out] ac A Ptr to an IRHaierAC176 object to use.
+/// @param[in] on The power setting.
+/// @param[in] mode The operation mode setting.
+/// @param[in] degrees The temperature setting in degrees.
+/// @param[in] fan The speed setting for the fan.
+/// @param[in] swingv The vertical swing setting.
+/// @param[in] turbo Run the device in turbo/powerful mode.
+/// @param[in] filter Turn on the (ion/pollen/etc) filter mode.
+/// @param[in] sleep Nr. of minutes for sleep mode. -1 is Off, >= 0 is on.
+void IRac::haier176(IRHaierAC176 *ac,
+                    const bool on, const stdAc::opmode_t mode,
+                    const float degrees, const stdAc::fanspeed_t fan,
+                    const stdAc::swingv_t swingv, const bool turbo,
+                    const bool filter, const int16_t sleep) {
+  ac->begin();
+  ac->setMode(ac->convertMode(mode));
+  ac->setTemp(degrees);
+  ac->setFan(ac->convertFan(fan));
+  ac->setSwing(ac->convertSwingV(swingv));
+  // No Horizontal Swing setting available.
+  // No Quiet setting available.
+  ac->setTurbo(turbo);
+  // No Light setting available.
+  ac->setHealth(filter);
+  // No Clean setting available.
+  // No Beep setting available.
+  ac->setSleep(sleep >= 0);  // Sleep on this A/C is either on or off.
+  ac->setPower(on);
+  ac->send();
+}
+#endif  // SEND_HAIER_AC176
+
 #if SEND_HAIER_AC_YRW02
 /// Send a Haier YRWO2 A/C message with the supplied settings.
 /// @param[in, out] ac A Ptr to an IRHaierACYRW02 object to use.
@@ -1252,6 +1297,37 @@ void IRac::hitachi424(IRHitachiAc424 *ac,
 }
 #endif  // SEND_HITACHI_AC424
 
+#if SEND_KELON
+/// Send a Kelon A/C message with the supplied settings.
+/// @param[in, out] ac A Ptr to an IRKelonAc object to use.
+/// @param[in] togglePower Whether to toggle the unit's power
+/// @param[in] mode The operation mode setting.
+/// @param[in] dryGrade The dehumidification intensity grade
+/// @param[in] degrees The temperature setting in degrees.
+/// @param[in] fan The speed setting for the fan.
+/// @param[in] toggleSwing Whether to toggle the swing setting
+/// @param[in] superCool Run the device in Super cooling mode.
+/// @param[in] sleep Nr. of minutes for sleep mode. -1 is Off, >= 0 is on
+void IRac::kelon(IRKelonAc *ac, const bool togglePower,
+                 const stdAc::opmode_t mode, const int8_t dryGrade,
+                 const float degrees, const stdAc::fanspeed_t fan,
+                 const bool toggleSwing, const bool superCool,
+                 const int16_t sleep) {
+  ac->begin();
+  ac->setMode(IRKelonAc::convertMode(mode));
+  ac->setFan(IRKelonAc::convertFan(fan));
+  ac->setTemp(static_cast<uint8_t>(degrees));
+  ac->setSleep(sleep >= 0);
+  ac->setSupercool(superCool);
+  ac->setDryGrade(dryGrade);
+
+  ac->setTogglePower(togglePower);
+  ac->setToggleSwingVertical(toggleSwing);
+
+  ac->send();
+}
+#endif  // SEND_KELON
+
 #if SEND_KELVINATOR
 /// Send a Kelvinator A/C message with the supplied settings.
 /// @param[in, out] ac A Ptr to an IRKelvinatorAC object to use.
@@ -1300,20 +1376,31 @@ void IRac::kelvinator(IRKelvinatorAC *ac,
 /// @param[in] mode The operation mode setting.
 /// @param[in] degrees The temperature setting in degrees.
 /// @param[in] fan The speed setting for the fan.
+/// @param[in] swingv The vertical swing setting.
+/// @param[in] swingv_prev The previous vertical swing setting.
+/// @param[in] swingh The horizontal swing setting.
+/// @param[in] light Turn on the LED/Display mode.
 void IRac::lg(IRLgAc *ac, const lg_ac_remote_model_t model,
               const bool on, const stdAc::opmode_t mode,
-              const float degrees, const stdAc::fanspeed_t fan) {
+              const float degrees, const stdAc::fanspeed_t fan,
+              const stdAc::swingv_t swingv, const stdAc::swingv_t swingv_prev,
+              const stdAc::swingh_t swingh, const bool light) {
   ac->begin();
   ac->setModel(model);
   ac->setPower(on);
   ac->setMode(ac->convertMode(mode));
   ac->setTemp(degrees);
   ac->setFan(ac->convertFan(fan));
-  // No Vertical swing setting available.
-  // No Horizontal swing setting available.
+  ac->setSwingV(ac->convertSwingV(swingv_prev));
+  ac->updateSwingPrev();
+  ac->setSwingV(ac->convertSwingV(swingv));
+  const uint8_t pos = ac->convertVaneSwingV(swingv);
+  for (uint8_t vane = 0; vane < kLgAcSwingVMaxVanes; vane++)
+    ac->setVaneSwingV(vane, pos);
+  ac->setSwingH(swingh != stdAc::swingh_t::kOff);
   // No Quiet setting available.
   // No Turbo setting available.
-  // No Light setting available.
+  ac->setLight(light);
   // No Filter setting available.
   // No Clean setting available.
   // No Beep setting available.
@@ -1719,7 +1806,7 @@ void IRac::samsung(IRSamsungAc *ac,
 #endif  // SEND_SAMSUNG_AC
 
 #if SEND_SANYO_AC
-/// Send a Toshiba A/C message with the supplied settings.
+/// Send a Sanyo A/C message with the supplied settings.
 /// @param[in, out] ac A Ptr to an IRSanyoAc object to use.
 /// @param[in] on The power setting.
 /// @param[in] mode The operation mode setting.
@@ -1756,6 +1843,44 @@ void IRac::sanyo(IRSanyoAc *ac,
   ac->send();
 }
 #endif  // SEND_SANYO_AC
+
+#if SEND_SANYO_AC88
+/// Send a Sanyo 88-bit A/C message with the supplied settings.
+/// @param[in, out] ac A Ptr to an IRSanyoAc88 object to use.
+/// @param[in] on The power setting.
+/// @param[in] mode The operation mode setting.
+/// @param[in] degrees The temperature setting in degrees.
+/// @param[in] fan The speed setting for the fan.
+/// @param[in] swingv The vertical swing setting.
+/// @param[in] turbo Run the device in turbo/powerful mode.
+/// @param[in] filter Turn on the (ion/pollen/etc) filter mode.
+/// @param[in] sleep Nr. of minutes for sleep mode. -1 is Off, >= 0 is on.
+/// @param[in] clock The time in Nr. of mins since midnight. < 0 is ignore.
+void IRac::sanyo88(IRSanyoAc88 *ac,
+                   const bool on, const stdAc::opmode_t mode,
+                   const float degrees, const stdAc::fanspeed_t fan,
+                   const stdAc::swingv_t swingv, const bool turbo,
+                   const bool filter, const int16_t sleep,
+                   const int16_t clock) {
+  ac->begin();
+  ac->setPower(on);
+  ac->setMode(ac->convertMode(mode));
+  ac->setTemp(degrees);
+  ac->setFan(ac->convertFan(fan));
+  ac->setSwingV(swingv != stdAc::swingv_t::kOff);
+  // No Horizontal swing setting available.
+  // No Quiet setting available.
+  ac->setTurbo(turbo);
+  // No Econo setting available.
+  // No Light setting available.
+  ac->setFilter(filter);
+  // No Clean setting available.
+  // No Beep setting available.
+  ac->setSleep(sleep >= 0);  // Sleep is either on/off, so convert to boolean.
+  if (clock >= 0) ac->setClock(clock);
+  ac->send();
+}
+#endif  // SEND_SANYO_AC88
 
 #if SEND_SHARP_AC
 /// Send a Sharp A/C message with the supplied settings.
@@ -1821,6 +1946,7 @@ void IRac::sharp(IRSharpAc *ac, const sharp_ac_remote_model_t model,
 /// @param[in] fan The speed setting for the fan.
 /// @param[in] swingv The vertical swing setting.
 /// @param[in] swingh The horizontal swing setting.
+/// @param[in] quiet Run the device in quiet/silent mode.
 /// @param[in] turbo Run the device in turbo/powerful mode.
 /// @param[in] light Turn on the LED/Display mode.
 /// @param[in] econo Run the device in economical mode.
@@ -1829,8 +1955,8 @@ void IRac::tcl112(IRTcl112Ac *ac,
                   const bool on, const stdAc::opmode_t mode,
                   const float degrees, const stdAc::fanspeed_t fan,
                   const stdAc::swingv_t swingv, const stdAc::swingh_t swingh,
-                  const bool turbo, const bool light, const bool econo,
-                  const bool filter) {
+                  const bool quiet, const bool turbo, const bool light,
+                  const bool econo, const bool filter) {
   ac->begin();
   ac->setPower(on);
   ac->setMode(ac->convertMode(mode));
@@ -1838,7 +1964,7 @@ void IRac::tcl112(IRTcl112Ac *ac,
   ac->setFan(ac->convertFan(fan));
   ac->setSwingVertical(swingv != stdAc::swingv_t::kOff);
   ac->setSwingHorizontal(swingh != stdAc::swingh_t::kOff);
-  // No Quiet setting available.
+  ac->setQuiet(quiet);
   ac->setTurbo(turbo);
   ac->setLight(light);
   ac->setEcono(econo);
@@ -1985,6 +2111,39 @@ void IRac::trotec(IRTrotecESP *ac,
   ac->send();
 }
 #endif  // SEND_TROTEC
+
+#if SEND_TROTEC_3550
+/// Send a Trotec 3550 A/C message with the supplied settings.
+/// @param[in, out] ac A Ptr to an IRTrotecESP object to use.
+/// @param[in] on The power setting.
+/// @param[in] mode The operation mode setting.
+/// @param[in] celsius Temperature units. True is Celsius, False is Fahrenheit.
+/// @param[in] degrees The temperature setting in degrees.
+/// @param[in] fan The speed setting for the fan.
+/// @param[in] swingv The vertical swing setting.
+void IRac::trotec3550(IRTrotec3550 *ac,
+                      const bool on, const stdAc::opmode_t mode,
+                      const bool celsius, const float degrees,
+                      const stdAc::fanspeed_t fan,
+                      const stdAc::swingv_t swingv) {
+  ac->begin();
+  ac->setPower(on);
+  ac->setMode(ac->convertMode(mode));
+  ac->setTemp(degrees, celsius);
+  ac->setFan(ac->convertFan(fan));
+  ac->setSwingV(swingv != stdAc::swingv_t::kOff);
+  // No Horizontal swing setting available.
+  // No Quiet setting available.
+  // No Turbo setting available.
+  // No Light setting available.
+  // No Filter setting available.
+  // No Clean setting available.
+  // No Beep setting available.
+  // No Sleep setting available.
+  // No Clock setting available.
+  ac->send();
+}
+#endif  // SEND_TROTEC_3550
 
 #if SEND_TRUMA
 /// Send a Truma A/C message with the supplied settings.
@@ -2253,6 +2412,13 @@ stdAc::state_t IRac::handleToggles(const stdAc::state_t desired,
         else
           result.swingv = stdAc::swingv_t::kOff;  // No change, so no toggle.
         break;
+      case decode_type_t::KELON:
+        if ((desired.swingv == stdAc::swingv_t::kOff) ^
+            (prev->swingv == stdAc::swingv_t::kOff))  // It changed, so toggle.
+          result.swingv = stdAc::swingv_t::kAuto;
+        else
+          result.swingv = stdAc::swingv_t::kOff;  // No change, so no toggle.
+        // FALL-THRU
       case decode_type_t::AIRWELL:
       case decode_type_t::DAIKIN64:
       case decode_type_t::PANASONIC_AC32:
@@ -2328,7 +2494,11 @@ bool IRac::sendAc(const stdAc::state_t desired, const stdAc::state_t *prev) {
   // Construct a pointer-safe previous power state incase prev is NULL/NULLPTR.
 #if (SEND_HITACHI_AC1 || SEND_SAMSUNG_AC || SEND_SHARP_AC)
   const bool prev_power = (prev != NULL) ? prev->power : !send.power;
-#endif
+#endif  // (SEND_HITACHI_AC1 || SEND_SAMSUNG_AC || SEND_SHARP_AC)
+#if SEND_LG
+  const stdAc::swingv_t prev_swingv = (prev != NULL) ? prev->swingv
+                                                     : stdAc::swingv_t::kOff;
+#endif  // SEND_LG
   // Per vendor settings & setup.
   switch (send.protocol) {
 #if SEND_AIRWELL
@@ -2522,6 +2692,15 @@ bool IRac::sendAc(const stdAc::state_t desired, const stdAc::state_t *prev) {
       break;
     }
 #endif  // SEND_HAIER_AC
+#if SEND_HAIER_AC176
+    case HAIER_AC176:
+    {
+      IRHaierAC176 ac(_pin, _inverted, _modulation);
+      haier176(&ac, send.power, send.mode, degC, send.fanspeed, send.swingv,
+               send.turbo, send.filter, send.sleep);
+      break;
+    }
+#endif  // SEND_HAIER_AC176
 #if SEND_HAIER_AC_YRW02
     case HAIER_AC_YRW02:
     {
@@ -2574,6 +2753,14 @@ bool IRac::sendAc(const stdAc::state_t desired, const stdAc::state_t *prev) {
       break;
     }
 #endif  // SEND_HITACHI_AC424
+#if SEND_KELON
+    case KELON: {
+      IRKelonAc ac(_pin, _inverted, _modulation);
+      kelon(&ac, send.power, send.mode, 0, send.degrees, send.fanspeed,
+            send.swingv != stdAc::swingv_t::kOff, send.turbo, send.sleep);
+      break;
+    }
+#endif
 #if SEND_KELVINATOR
     case KELVINATOR:
     {
@@ -2590,7 +2777,8 @@ bool IRac::sendAc(const stdAc::state_t desired, const stdAc::state_t *prev) {
     {
       IRLgAc ac(_pin, _inverted, _modulation);
       lg(&ac, (lg_ac_remote_model_t)send.model, send.power, send.mode,
-         send.degrees, send.fanspeed);
+         send.degrees, send.fanspeed, send.swingv, prev_swingv, send.swingh,
+         send.light);
       break;
     }
 #endif  // SEND_LG
@@ -2697,6 +2885,15 @@ bool IRac::sendAc(const stdAc::state_t desired, const stdAc::state_t *prev) {
       break;
     }
 #endif  // SEND_SANYO_AC
+#if SEND_SANYO_AC88
+    case SANYO_AC88:
+    {
+      IRSanyoAc88 ac(_pin, _inverted, _modulation);
+      sanyo88(&ac, send.power, send.mode, degC, send.fanspeed, send.swingv,
+              send.turbo, send.filter, send.sleep, send.clock);
+      break;
+    }
+#endif  // SEND_SANYO_AC88
 #if SEND_SHARP_AC
     case SHARP_AC:
     {
@@ -2712,7 +2909,8 @@ bool IRac::sendAc(const stdAc::state_t desired, const stdAc::state_t *prev) {
     {
       IRTcl112Ac ac(_pin, _inverted, _modulation);
       tcl112(&ac, send.power, send.mode, degC, send.fanspeed, send.swingv,
-             send.swingh, send.turbo, send.light, send.econo, send.filter);
+             send.swingh, send.quiet, send.turbo, send.light, send.econo,
+             send.filter);
       break;
     }
 #endif  // SEND_TCL112AC
@@ -2751,6 +2949,15 @@ bool IRac::sendAc(const stdAc::state_t desired, const stdAc::state_t *prev) {
       break;
     }
 #endif  // SEND_TROTEC
+#if SEND_TROTEC_3550
+    case TROTEC_3550:
+    {
+      IRTrotec3550 ac(_pin, _inverted, _modulation);
+      trotec3550(&ac, send.power, send.mode, send.celsius, send.degrees,
+                 send.fanspeed, send.swingv);
+      break;
+    }
+#endif  // SEND_TROTEC_3550
 #if SEND_TRUMA
     case TRUMA:
     {
@@ -2801,7 +3008,7 @@ bool IRac::sendAc(const stdAc::state_t desired, const stdAc::state_t *prev) {
       return false;  // Fail, didn't match anything.
   }
   return true;  // Success.
-}
+}  // NOLINT(readability/fn_size)
 
 /// Update the previous state to the current one.
 void IRac::markAsSent(void) {
@@ -2950,10 +3157,10 @@ stdAc::swingh_t IRac::strToSwingH(const char *str,
   else if (!strcasecmp(str, kOffStr) ||
            !strcasecmp(str, kStopStr))
     return stdAc::swingh_t::kOff;
-  else if (!strcasecmp(str, kLeftMaxStr) ||
-           !strcasecmp(str, D_STR_LEFT " " D_STR_MAX) ||
-           !strcasecmp(str, D_STR_MAX D_STR_LEFT) ||
-           !strcasecmp(str, kMaxLeftStr))
+  else if (!strcasecmp(str, kLeftMaxStr) ||                // "LeftMax"
+           !strcasecmp(str, D_STR_LEFT " " D_STR_MAX) ||   // "Left Max"
+           !strcasecmp(str, D_STR_MAX D_STR_LEFT) ||       // "MaxLeft"
+           !strcasecmp(str, kMaxLeftStr))                  // "Max Left"
     return stdAc::swingh_t::kLeftMax;
   else if (!strcasecmp(str, kLeftStr))
     return stdAc::swingh_t::kLeft;
@@ -2965,10 +3172,10 @@ stdAc::swingh_t IRac::strToSwingH(const char *str,
     return stdAc::swingh_t::kMiddle;
   else if (!strcasecmp(str, kRightStr))
     return stdAc::swingh_t::kRight;
-  else if (!strcasecmp(str, kRightMaxStr) ||
-           !strcasecmp(str, D_STR_MAX " " D_STR_RIGHT) ||
-           !strcasecmp(str, D_STR_MAX D_STR_RIGHT) ||
-           !strcasecmp(str, kMaxRightStr))
+  else if (!strcasecmp(str, kRightMaxStr) ||               // "RightMax"
+           !strcasecmp(str, D_STR_RIGHT " " D_STR_MAX) ||  // "Right Max"
+           !strcasecmp(str, D_STR_MAX D_STR_RIGHT) ||      // "MaxRight"
+           !strcasecmp(str, kMaxRightStr))                 // "Max Right"
     return stdAc::swingh_t::kRightMax;
   else if (!strcasecmp(str, kWideStr))
     return stdAc::swingh_t::kWide;
@@ -3008,6 +3215,10 @@ int16_t IRac::strToModel(const char *str, const int16_t def) {
     return lg_ac_remote_model_t::GE6711AR2853M;
   } else if (!strcasecmp(str, "AKB75215403")) {
     return lg_ac_remote_model_t::AKB75215403;
+  } else if (!strcasecmp(str, "AKB74955603")) {
+    return lg_ac_remote_model_t::AKB74955603;
+  } else if (!strcasecmp(str, "AKB73757604")) {
+    return lg_ac_remote_model_t::AKB73757604;
   // Panasonic A/C families
   } else if (!strcasecmp(str, "LKE") || !strcasecmp(str, "PANASONICLKE")) {
     return panasonic_ac_remote_model_t::kPanasonicLke;
@@ -3283,6 +3494,13 @@ namespace IRAcUtils {
         return ac.toString();
       }
 #endif  // DECODE_FUJITSU_AC
+#if DECODE_KELON
+      case decode_type_t::KELON: {
+        IRKelonAc ac(kGpioUnused);
+        ac.setRaw(result->value);
+        return ac.toString();
+      }
+#endif  // DECODE_KELON
 #if DECODE_KELVINATOR
       case decode_type_t::KELVINATOR: {
         IRKelvinatorAC ac(kGpioUnused);
@@ -3344,6 +3562,13 @@ namespace IRAcUtils {
         return ac.toString();
       }
 #endif  // DECODE_TROTEC
+#if DECODE_TROTEC_3550
+      case decode_type_t::TROTEC_3550: {
+        IRTrotec3550 ac(kGpioUnused);
+        ac.setRaw(result->state);
+        return ac.toString();
+      }
+#endif  // DECODE_TROTEC_3550
 #if DECODE_TRUMA
       case decode_type_t::TRUMA: {
         IRTrumaAc ac(kGpioUnused);
@@ -3379,6 +3604,13 @@ namespace IRAcUtils {
         return ac.toString();
       }
 #endif  // DECODE_HAIER_AC
+#if DECODE_HAIER_AC176
+      case decode_type_t::HAIER_AC176: {
+        IRHaierAC176 ac(kGpioUnused);
+        ac.setRaw(result->state);
+        return ac.toString();
+      }
+#endif  // DECODE_HAIER_AC176
 #if DECODE_HAIER_AC_YRW02
       case decode_type_t::HAIER_AC_YRW02: {
         IRHaierACYRW02 ac(kGpioUnused);
@@ -3400,6 +3632,13 @@ namespace IRAcUtils {
         return ac.toString();
       }
 #endif  // DECODE_SANYO_AC
+#if DECODE_SANYO_AC88
+      case decode_type_t::SANYO_AC88: {
+        IRSanyoAc88 ac(kGpioUnused);
+        ac.setRaw(result->state);
+        return ac.toString();
+      }
+#endif  // DECODE_SANYO_AC88
 #if DECODE_SHARP_AC
       case decode_type_t::SHARP_AC: {
         IRSharpAc ac(kGpioUnused);
@@ -3516,14 +3755,7 @@ namespace IRAcUtils {
       case decode_type_t::LG:
       case decode_type_t::LG2: {
         IRLgAc ac(kGpioUnused);
-        ac.setRaw(result->value);  // Like Coolix, use value instead of state.
-        switch (result->decode_type) {
-          case decode_type_t::LG2:
-            ac.setModel(lg_ac_remote_model_t::AKB75215403);
-            break;
-          default:
-            ac.setModel(lg_ac_remote_model_t::GE6711AR2853M);
-        }
+        ac.setRaw(result->value, result->decode_type);  // Use value, not state.
         return ac.isValidLgAc() ? ac.toString() : "";
       }
 #endif  // DECODE_LG
@@ -3728,6 +3960,14 @@ namespace IRAcUtils {
         break;
       }
 #endif  // DECODE_HAIER_AC
+#if DECODE_HAIER_AC176
+      case decode_type_t::HAIER_AC176: {
+        IRHaierAC176 ac(kGpioUnused);
+        ac.setRaw(decode->state);
+        *result = ac.toCommon();
+        break;
+      }
+#endif  // DECODE_HAIER_AC176
 #if DECODE_HAIER_AC_YRW02
       case decode_type_t::HAIER_AC_YRW02: {
         IRHaierACYRW02 ac(kGpioUnused);
@@ -3768,6 +4008,14 @@ namespace IRAcUtils {
         break;
       }
 #endif  // DECODE_HITACHI_AC424
+#if DECODE_KELON
+      case decode_type_t::KELON: {
+        IRKelonAc ac(kGpioUnused);
+        ac.setRaw(decode->value);
+        *result = ac.toCommon();
+        break;
+      }
+#endif  // DECODE_KELON
 #if DECODE_KELVINATOR
       case decode_type_t::KELVINATOR: {
         IRKelvinatorAC ac(kGpioUnused);
@@ -3780,16 +4028,9 @@ namespace IRAcUtils {
       case decode_type_t::LG:
       case decode_type_t::LG2: {
         IRLgAc ac(kGpioUnused);
-        ac.setRaw(decode->value);  // Uses value instead of state.
+        ac.setRaw(decode->value, decode->decode_type);  // Use value, not state.
         if (!ac.isValidLgAc()) return false;
-        switch (decode->decode_type) {
-          case decode_type_t::LG2:
-            ac.setModel(lg_ac_remote_model_t::AKB75215403);
-            break;
-          default:
-            ac.setModel(lg_ac_remote_model_t::GE6711AR2853M);
-        }
-        *result = ac.toCommon();
+        *result = ac.toCommon(prev);
         break;
       }
 #endif  // DECODE_LG
@@ -3883,6 +4124,14 @@ namespace IRAcUtils {
         break;
       }
 #endif  // DECODE_SANYO_AC
+#if DECODE_SANYO_AC88
+      case decode_type_t::SANYO_AC88: {
+        IRSanyoAc88 ac(kGpioUnused);
+        ac.setRaw(decode->state);
+        *result = ac.toCommon();
+        break;
+      }
+#endif  // DECODE_SANYO_AC88
 #if DECODE_SHARP_AC
       case decode_type_t::SHARP_AC: {
         IRSharpAc ac(kGpioUnused);
@@ -3895,7 +4144,7 @@ namespace IRAcUtils {
       case decode_type_t::TCL112AC: {
         IRTcl112Ac ac(kGpioUnused);
         ac.setRaw(decode->state);
-        *result = ac.toCommon();
+        *result = ac.toCommon(prev);
         break;
       }
 #endif  // DECODE_TCL112AC
@@ -3931,6 +4180,14 @@ namespace IRAcUtils {
         break;
       }
 #endif  // DECODE_TROTEC
+#if DECODE_TROTEC_3550
+      case decode_type_t::TROTEC_3550: {
+        IRTrotec3550 ac(kGpioUnused);
+        ac.setRaw(decode->state);
+        *result = ac.toCommon();
+        break;
+      }
+#endif  // DECODE_TROTEC_3550
 #if DECODE_TRUMA
       case decode_type_t::TRUMA: {
         IRTrumaAc ac(kGpioUnused);

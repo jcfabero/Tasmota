@@ -50,6 +50,11 @@ int16_t disp_xpos = 0;
 int16_t disp_ypos = 0;
 
 #ifdef USE_MULTI_DISPLAY
+
+#ifndef MAX_MULTI_DISPLAYS
+#define MAX_MULTI_DISPLAYS 3
+#endif
+
 struct MULTI_DISP {
   Renderer *display;
   uint16_t fg_color;
@@ -58,7 +63,7 @@ struct MULTI_DISP {
   int16_t disp_ypos;
   uint8_t color_type;
   uint8_t auto_draw;
-} displays[3];
+} displays[MAX_MULTI_DISPLAYS];
 uint8_t cur_display;
 Renderer *Init_uDisplay(const char *desc, int8_t cs);
 
@@ -204,6 +209,8 @@ struct GRAPH {
   uint8_t yticks;
   uint8_t last_val;
   uint8_t color_index;
+  uint16_t bg_color;
+  uint16_t fg_color;
   GFLAGS flags;
 };
 
@@ -396,6 +403,30 @@ uint32_t decode_te(char *line) {
 }
 
 /*-------------------------------------------------------------------------------------------*/
+// Getter and Setter for DisplayDimer
+// Original encoding is range 0..15
+// New encoding is range 0..100 using negative numbers, i.e. 0..-100
+uint8_t GetDisplayDimmer(void) {
+  if (Settings->display_dimmer_protected > 0) {
+    return changeUIntScale(Settings->display_dimmer_protected, 0, 15, 0, 100);
+  } else {
+    if (Settings->display_dimmer_protected < -100) { Settings->display_dimmer_protected = -100; }
+    return - Settings->display_dimmer_protected;
+  }
+}
+
+// retro-compatible call to get range 0..15
+uint8_t GetDisplayDimmer16(void) {
+  return changeUIntScale(GetDisplayDimmer(), 0, 100, 0, 15);
+}
+
+// In: 0..100
+void SetDisplayDimmer(uint8_t dimmer) {
+  if (dimmer > 100) { dimmer = 100; }
+  Settings->display_dimmer_protected = - dimmer;
+}
+
+/*-------------------------------------------------------------------------------------------*/
 
 #define DISPLAY_BUFFER_COLS    128          // Max number of characters in linebuf
 
@@ -559,7 +590,7 @@ void DisplayText(void)
             {
               var = atoiv(cp, &temp);
               cp += var;
-              if (temp < 1 || temp > 3) {
+              if (temp < 1 || temp > MAX_MULTI_DISPLAYS) {
                 temp = 1;
               }
               temp--;
@@ -588,6 +619,7 @@ void DisplayText(void)
                         renderer = Init_uDisplay(fdesc, -1);
                         Set_display(temp);
                         AddLog(LOG_LEVEL_INFO, PSTR("DSP: File descriptor loaded %x"),renderer);
+                        free(fdesc);
                       }
                     }
                   }
@@ -1301,11 +1333,7 @@ void DisplayDTVarsTeleperiod(void) {
   if (jlen < DTV_JSON_SIZE) {
     char *json = (char*)malloc(jlen + 2);
     if (json) {
-#ifdef MQTT_DATA_STRING
-      strlcpy(json, TasmotaGlobal.mqtt_data.c_str(), jlen + 1);
-#else
-      strlcpy(json, TasmotaGlobal.mqtt_data, jlen + 1);
-#endif
+      strlcpy(json, ResponseData(), jlen + 1);
       get_dt_vars(json);
       free(json);
     }
@@ -1324,11 +1352,7 @@ void get_dt_mqtt(void) {
     ResponseJsonStart();
     ResponseJsonEnd();
   }
-#ifdef MQTT_DATA_STRING
-  get_dt_vars(TasmotaGlobal.mqtt_data.c_str());
-#else
-  get_dt_vars(TasmotaGlobal.mqtt_data);
-#endif
+  get_dt_vars(ResponseData());
 }
 
 void get_dt_vars(char *json) {
@@ -1743,13 +1767,8 @@ void DisplayLocalSensor(void)
 {
   if ((Settings->display_mode &0x02) && (0 == TasmotaGlobal.tele_period)) {
     char no_topic[1] = { 0 };
-#ifdef MQTT_DATA_STRING
-//    DisplayAnalyzeJson(TasmotaGlobal.mqtt_topic, TasmotaGlobal.mqtt_data.c_str());  // Add local topic
-    DisplayAnalyzeJson(no_topic, TasmotaGlobal.mqtt_data.c_str());    // Discard any topic
-#else
-//    DisplayAnalyzeJson(TasmotaGlobal.mqtt_topic, TasmotaGlobal.mqtt_data);  // Add local topic
-    DisplayAnalyzeJson(no_topic, TasmotaGlobal.mqtt_data);    // Discard any topic
-#endif
+//    DisplayAnalyzeJson(TasmotaGlobal.mqtt_topic, ResponseData());  // Add local topic
+    DisplayAnalyzeJson(no_topic, ResponseData());    // Discard any topic
   }
 }
 
@@ -1763,6 +1782,7 @@ void DisplayLocalSensor(void)
 void DisplayInitDriver(void)
 {
   XdspCall(FUNC_DISPLAY_INIT_DRIVER);
+  ApplyDisplayDimmer();
 
 #ifdef USE_MULTI_DISPLAY
   Set_display(0);
@@ -1834,7 +1854,7 @@ void CmndDisplay(void) {
     D_CMND_DISP_MODE "\":%d,\"" D_CMND_DISP_DIMMER "\":%d,\"" D_CMND_DISP_SIZE "\":%d,\"" D_CMND_DISP_FONT "\":%d,\""
     D_CMND_DISP_ROTATE "\":%d,\"" D_CMND_DISP_INVERT "\":%d,\"" D_CMND_DISP_REFRESH "\":%d,\"" D_CMND_DISP_COLS "\":[%d,%d],\"" D_CMND_DISP_ROWS "\":%d}}"),
     Settings->display_model, Settings->display_options.type, Settings->display_width, Settings->display_height,
-    Settings->display_mode, changeUIntScale(Settings->display_dimmer, 0, 15, 0, 100), Settings->display_size, Settings->display_font,
+    Settings->display_mode, GetDisplayDimmer(), Settings->display_size, Settings->display_font,
     Settings->display_rotate, Settings->display_options.invert, Settings->display_refresh, Settings->display_cols[0], Settings->display_cols[1], Settings->display_rows);
 }
 
@@ -1909,22 +1929,30 @@ void CmndDisplayMode(void) {
   ResponseCmndNumber(Settings->display_mode);
 }
 
+// Apply the current display dimmer
+void ApplyDisplayDimmer(void) {
+  uint8_t dimmer8 = changeUIntScale(GetDisplayDimmer(), 0, 100, 0, 255);
+  uint8_t dimmer8_gamma = ledGamma(dimmer8);
+  if (dimmer8 && !(disp_power)) {
+    ExecuteCommandPower(disp_device, POWER_ON, SRC_DISPLAY);
+  }
+  else if (!dimmer8 && disp_power) {
+    ExecuteCommandPower(disp_device, POWER_OFF, SRC_DISPLAY);
+  }
+  if (renderer) {
+    renderer->dim8(dimmer8, dimmer8_gamma);   // provide 8 bits and gamma corrected dimmer in 8 bits
+  } else {
+    XdspCall(FUNC_DISPLAY_DIM);
+  }
+}
+
 void CmndDisplayDimmer(void) {
   if ((XdrvMailbox.payload >= 0) && (XdrvMailbox.payload <= 100)) {
-    Settings->display_dimmer = changeUIntScale(XdrvMailbox.payload, 0, 100, 0, 15);  // Correction for Domoticz (0 - 15)
-    if (Settings->display_dimmer && !(disp_power)) {
-      ExecuteCommandPower(disp_device, POWER_ON, SRC_DISPLAY);
-    }
-    else if (!Settings->display_dimmer && disp_power) {
-      ExecuteCommandPower(disp_device, POWER_OFF, SRC_DISPLAY);
-    }
-    if (renderer) {
-      renderer->dim(Settings->display_dimmer);
-    } else {
-      XdspCall(FUNC_DISPLAY_DIM);
-    }
+    uint8_t dimmer = XdrvMailbox.payload;
+    SetDisplayDimmer(dimmer);
+    ApplyDisplayDimmer();
   }
-  ResponseCmndNumber(changeUIntScale(Settings->display_dimmer, 0, 15, 0, 100));
+  ResponseCmndNumber(GetDisplayDimmer());
 }
 
 void CmndDisplaySize(void) {
@@ -2358,12 +2386,12 @@ void ClrGraph(uint16_t num) {
   // clr inside, but only 1.graph if overlapped
   if (gp->flags.overlay) return;
 
-  renderer->fillRect(gp->xp+1,gp->yp+1,gp->xs-2,gp->ys-2,bg_color);
+  renderer->fillRect(gp->xp+1,gp->yp+1,gp->xs-2,gp->ys-2,gp->bg_color);
 
   if (xticks) {
     float cxp=gp->xp,xd=(float)gp->xs/(float)xticks;
     for (count=0; count<xticks; count++) {
-      renderer->writeFastVLine(cxp,gp->yp+gp->ys-TICKLEN,TICKLEN,fg_color);
+      renderer->writeFastVLine(cxp,gp->yp+gp->ys-TICKLEN,TICKLEN,gp->fg_color);
       cxp+=xd;
     }
   }
@@ -2373,27 +2401,27 @@ void ClrGraph(uint16_t num) {
       float cxp=0;
       float czp=gp->yp+(gp->ymax/gp->range);
       while (cxp<gp->xs) {
-        renderer->writeFastHLine(gp->xp+cxp,czp,2,fg_color);
+        renderer->writeFastHLine(gp->xp+cxp,czp,2,gp->fg_color);
         cxp+=6.0;
       }
       // align ticks to zero line
       float cyp=0,yd=gp->ys/yticks;
       for (count=0; count<yticks; count++) {
         if ((czp-cyp)>gp->yp) {
-          renderer->writeFastHLine(gp->xp,czp-cyp,TICKLEN,fg_color);
-          renderer->writeFastHLine(gp->xp+gp->xs-TICKLEN,czp-cyp,TICKLEN,fg_color);
+          renderer->writeFastHLine(gp->xp,czp-cyp,TICKLEN,gp->fg_color);
+          renderer->writeFastHLine(gp->xp+gp->xs-TICKLEN,czp-cyp,TICKLEN,gp->fg_color);
         }
         if ((czp+cyp)<(gp->yp+gp->ys)) {
           renderer->writeFastHLine(gp->xp,czp+cyp,TICKLEN,fg_color);
-          renderer->writeFastHLine(gp->xp+gp->xs-TICKLEN,czp+cyp,TICKLEN,fg_color);
+          renderer->writeFastHLine(gp->xp+gp->xs-TICKLEN,czp+cyp,TICKLEN,gp->fg_color);
         }
         cyp+=yd;
       }
     } else {
       float cyp=gp->yp,yd=gp->ys/yticks;
       for (count=0; count<yticks; count++) {
-        renderer->writeFastHLine(gp->xp,cyp,TICKLEN,fg_color);
-        renderer->writeFastHLine(gp->xp+gp->xs-TICKLEN,cyp,TICKLEN,fg_color);
+        renderer->writeFastHLine(gp->xp,cyp,TICKLEN,gp->fg_color);
+        renderer->writeFastHLine(gp->xp+gp->xs-TICKLEN,cyp,TICKLEN,gp->fg_color);
         cyp+=yd;
       }
     }
@@ -2422,6 +2450,9 @@ void DefineGraph(uint16_t num,uint16_t xp,uint16_t yp,int16_t xs,uint16_t ys,int
       return;
     }
   }
+
+  gp->bg_color=bg_color;
+  gp->fg_color=fg_color;
 
   // 6 bits per axis
   gp->xticks=(num>>4)&0x3f;
@@ -2476,7 +2507,7 @@ void DefineGraph(uint16_t num,uint16_t xp,uint16_t yp,int16_t xs,uint16_t ys,int
   }
 
   // draw rectangle
-  renderer->drawRect(xp,yp,xs,ys,fg_color);
+  renderer->drawRect(xp,yp,xs,ys,gp->fg_color);
   // clr inside
   ClrGraph(index);
 
@@ -2591,7 +2622,7 @@ void RedrawGraph(uint8_t num, uint8_t flags) {
   if (!renderer) return;
 
   gp->flags.draw=1;
-  uint16_t linecol=fg_color;
+  uint16_t linecol=gp->fg_color;
 
   if (color_type==COLOR_COLOR) {
     linecol = GetColorFromIndex(gp->color_index);
@@ -2599,7 +2630,7 @@ void RedrawGraph(uint8_t num, uint8_t flags) {
 
   if (!gp->flags.overlay) {
     // draw rectangle
-    renderer->drawRect(gp->xp,gp->yp,gp->xs,gp->ys,fg_color);
+    renderer->drawRect(gp->xp,gp->yp,gp->xs,gp->ys,gp->fg_color);
     // clr inside
     ClrGraph(index);
   }
@@ -2614,7 +2645,7 @@ void AddGraph(uint8_t num,uint8_t val) {
   struct GRAPH *gp=graph[num];
   if (!renderer) return;
 
-  uint16_t linecol=fg_color;
+  uint16_t linecol=gp->fg_color;
   if (color_type==COLOR_COLOR) {
     linecol = GetColorFromIndex(gp->color_index);
   }
@@ -2636,7 +2667,7 @@ void AddGraph(uint8_t num,uint8_t val) {
       // clr area and redraw graph
       if (!gp->flags.overlay) {
         // draw rectangle
-        renderer->drawRect(gp->xp,gp->yp,gp->xs,gp->ys,fg_color);
+        renderer->drawRect(gp->xp,gp->yp,gp->xs,gp->ys,gp->fg_color);
         // clr inner and draw ticks
         ClrGraph(num);
       }

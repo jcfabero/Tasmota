@@ -580,6 +580,8 @@ uint16_t IRsend::minRepeats(const decode_type_t protocol) {
       return kDishMinRepeat;
     case EPSON:
       return kEpsonMinRepeat;
+    case SANYO_AC88:
+      return kSanyoAc88MinRepeat;
     case SONY:
       return kSonyMinRepeat;
     case SONY_38K:
@@ -610,6 +612,7 @@ uint16_t IRsend::defaultBits(const decode_type_t protocol) {
     case DENON:
     case SHARP:
       return 15;
+    case BOSE:
     case DISH:
     case GICABLE:
     case JVC:
@@ -658,6 +661,7 @@ uint16_t IRsend::defaultBits(const decode_type_t protocol) {
     case SANYO_LC7461:
       return kSanyoLC7461Bits;  // 42
     case GOODWEATHER:
+    case KELON:
     case MIDEA:
     case PANASONIC:
       return 48;
@@ -700,6 +704,8 @@ uint16_t IRsend::defaultBits(const decode_type_t protocol) {
       return kHaierACBits;
     case HAIER_AC_YRW02:
       return kHaierACYRW02Bits;
+    case HAIER_AC176:
+      return kHaierAC176Bits;
     case HITACHI_AC:
       return kHitachiAcBits;
     case HITACHI_AC1:
@@ -736,13 +742,18 @@ uint16_t IRsend::defaultBits(const decode_type_t protocol) {
       return kSamsungAcBits;
     case SANYO_AC:
       return kSanyoAcBits;
+    case SANYO_AC88:
+      return kSanyoAc88Bits;
     case SHARP_AC:
       return kSharpAcBits;
     case TCL112AC:
       return kTcl112AcBits;
+    case TEKNOPOINT:
+      return kTeknopointBits;
     case TOSHIBA_AC:
       return kToshibaACBits;
     case TROTEC:
+    case TROTEC_3550:
       return kTrotecBits;
     case VOLTAS:
       return kVoltasBits;
@@ -780,6 +791,11 @@ bool IRsend::send(const decode_type_t type, const uint64_t data,
       sendAiwaRCT501(data, nbits, min_repeat);
       break;
 #endif
+#if SEND_BOSE
+    case BOSE:
+      sendBose(data, nbits, min_repeat);
+      break;
+#endif  // SEND_BOSE
 #if SEND_CARRIER_AC
     case CARRIER_AC:
       sendCarrierAC(data, nbits, min_repeat);
@@ -865,6 +881,11 @@ bool IRsend::send(const decode_type_t type, const uint64_t data,
       sendJVC(data, nbits, min_repeat);
       break;
 #endif
+#if SEND_KELON
+    case KELON:
+      sendKelon(data, nbits, min_repeat);
+      break;
+#endif  // SEND_KELON
 #if SEND_LASERTAG
     case LASERTAG:
       sendLasertag(data, nbits, min_repeat);
@@ -1143,6 +1164,11 @@ bool IRsend::send(const decode_type_t type, const uint8_t *state,
       sendHaierACYRW02(state, nbytes);
       break;
 #endif  // SEND_HAIER_AC_YRW02
+#if SEND_HAIER_AC176
+    case HAIER_AC176:
+      sendHaierAC176(state, nbytes);
+      break;
+#endif  // SEND_HAIER_AC176
 #if SEND_HITACHI_AC
     case HITACHI_AC:
       sendHitachiAC(state, nbytes);
@@ -1231,6 +1257,11 @@ bool IRsend::send(const decode_type_t type, const uint8_t *state,
       sendSanyoAc(state, nbytes);
       break;
 #endif  // SEND_SANYO_AC
+#if SEND_SANYO_AC88
+    case SANYO_AC88:
+      sendSanyoAc88(state, nbytes);
+      break;
+#endif  // SEND_SANYO_AC88
 #if SEND_SHARP_AC
     case SHARP_AC:
       sendSharpAc(state, nbytes);
@@ -1241,6 +1272,11 @@ bool IRsend::send(const decode_type_t type, const uint8_t *state,
       sendTcl112Ac(state, nbytes);
       break;
 #endif  // SEND_TCL112AC
+#if SEND_TEKNOPOINT
+    case TEKNOPOINT:
+      sendTeknopoint(state, nbytes);
+      break;
+#endif  // SEND_TEKNOPOINT
 #if SEND_TOSHIBA_AC
     case TOSHIBA_AC:
       sendToshibaAC(state, nbytes);
@@ -1251,6 +1287,11 @@ bool IRsend::send(const decode_type_t type, const uint8_t *state,
       sendTrotec(state, nbytes);
       break;
 #endif  // SEND_TROTEC
+#if SEND_TROTEC_3550
+    case TROTEC_3550:
+      sendTrotec3550(state, nbytes);
+      break;
+#endif  // SEND_TROTEC_3550
 #if SEND_WHIRLPOOL_AC
     case WHIRLPOOL_AC:
       sendWhirlpoolAC(state, nbytes);

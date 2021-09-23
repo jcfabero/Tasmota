@@ -69,9 +69,6 @@ keywords if then else endif, or, and are better readable for beginners (others m
 #define MAX_SARRAY_NUM 32
 #endif
 
-#include <renderer.h>
-extern Renderer *renderer;
-
 uint32_t EncodeLightId(uint8_t relay_id);
 uint32_t DecodeLightId(uint32_t hue_id);
 
@@ -81,7 +78,7 @@ uint32_t DecodeLightId(uint32_t hue_id);
 
 #undef USE_SCRIPT_FATFS
 #define USE_SCRIPT_FATFS -1
-#pragma message "universal file system used"
+// #pragma message "universal file system used"
 
 #else // USE_UFILESYS
 
@@ -164,7 +161,10 @@ void Script_ticker4_end(void) {
 #endif
 #endif
 
+#if defined(USE_SML_M) && defined (USE_SML_SCRIPT_CMD)
 extern uint8_t sml_json_enable;
+extern uint8_t dvalid[SML_MAX_VARS];
+#endif
 
 #if defined(EEP_SCRIPT_SIZE) && !defined(ESP32)
 
@@ -206,6 +206,10 @@ void alt_eeprom_readBytes(uint32_t adr, uint32_t len, uint8_t *buf) {
 
 #endif // LITTLEFS_SCRIPT_SIZE
 
+
+#ifdef TESLA_POWERWALL
+#include "powerwall.h"
+#endif
 
 // offsets epoch readings by 1.1.2019 00:00:00 to fit into float with second resolution
 #ifndef EPOCH_OFFSET
@@ -784,6 +788,9 @@ char *script;
       if (imemptr) free(imemptr);
       return -4;
     }
+
+    memset(script_mem, 0, script_mem_size);
+
     glob_script_mem.script_mem = script_mem;
     glob_script_mem.script_mem_size = script_mem_size;
 
@@ -865,7 +872,7 @@ char *script;
     }
 
     // variables usage info
-    AddLog(LOG_LEVEL_INFO, PSTR("Script: nv=%d, tv=%d, vns=%d, ram=%d"), nvars, svars, index, glob_script_mem.script_mem_size);
+    AddLog(LOG_LEVEL_INFO, PSTR("Script: nv=%d, tv=%d, vns=%d, vmem=%d, smem=%d"), nvars, svars, index, glob_script_mem.script_mem_size, glob_script_mem.script_size);
 
     // copy string variables
     char *cp1 = glob_script_mem.glob_snp;
@@ -1076,11 +1083,23 @@ void script_udp_sendvar(char *vname,float *fp,char *sp) {
 void ws2812_set_array(float *array ,uint32_t len, uint32_t offset) {
 
   Ws2812ForceSuspend();
-  for (uint32_t cnt = 0; cnt<len; cnt++) {
-    uint32_t index = cnt + offset;
-    if (index>Settings->light_pixels) break;
-    uint32_t col = array[cnt];
-    Ws2812SetColor(index + 1, col>>16, col>>8, col, 0);
+  for (uint32_t cnt = 0; cnt < len; cnt++) {
+    uint32_t index;
+    if (! (offset & 0x1000)) {
+      index = cnt + (offset & 0x7ff);
+    } else {
+      index = cnt/2 + (offset & 0x7ff);
+    }
+    if (index > Settings->light_pixels) break;
+    if (! (offset & 0x1000)) {
+      uint32_t col = array[cnt];
+      Ws2812SetColor(index + 1, col>>16, col>>8, col, 0);
+    } else {
+      uint32_t hcol = array[cnt];
+      cnt++;
+      uint32_t lcol = array[cnt];
+      Ws2812SetColor(index + 1, hcol>>8, hcol, lcol>>8, lcol);
+    }
   }
   Ws2812ForceUpdate();
 }
@@ -1635,6 +1654,16 @@ char *isvar(char *lp, uint8_t *vtype, struct T_INDEX *tind, float *fp, char *sp,
 
     if (gv && gv->jo) {
       // look for json input
+
+#if 0
+      char sbuf[SCRIPT_MAXSSIZE];
+      sbuf[0]=0;
+      char tmp[128];
+      Replace_Cmd_Vars(lp, 1, tmp, sizeof(tmp));
+      uint32_t res = JsonParsePath(gv->jo, tmp, '#', NULL, sbuf, sizeof(sbuf)); // software_version
+      AddLog(LOG_LEVEL_INFO, PSTR("json string: %s %s"),tmp,  sbuf);
+#endif
+
       JsonParserObject *jpo = gv->jo;
       char jvname[64];
       strcpy(jvname, vname);
@@ -1749,6 +1778,7 @@ chknext:
           len = 0;
           goto exit;
         }
+#endif
         if (!strncmp(vname, "abs(", 4)) {
           lp=GetNumericArgument(lp + 4, OPER_EQU, &fvar, gv);
           fvar = fabs(fvar);
@@ -1756,7 +1786,7 @@ chknext:
           len = 0;
           goto exit;
         }
-#endif
+
         if (!strncmp(vname, "asc(", 4)) {
           char str[SCRIPT_MAXSSIZE];
           lp = GetStringArgument(lp + 4, OPER_EQU, str, gv);
@@ -2217,12 +2247,7 @@ chknext:
         if (!strncmp(vname, "fmt(", 4)) {
           lp = GetNumericArgument(lp + 4, OPER_EQU, &fvar, gv);
           if (!fvar) {
-#ifdef ESP8266
             LittleFS.format();
-#endif
-#ifdef ESP32
-            LITTLEFS.format();
-#endif
           } else {
             //SD.format();
           }
@@ -2401,11 +2426,8 @@ chknext:
           char rstring[SCRIPT_MAXSSIZE];
           rstring[0] = 0;
           int8_t index = fvar;
-#ifdef MQTT_DATA_STRING
-          char *wd = TasmotaGlobal.mqtt_data;
-#else
-          char *wd = TasmotaGlobal.mqtt_data.c_str();
-#endif
+          char *wd = ResponseData();
+
           strlcpy(rstring, wd, glob_script_mem.max_ssize);
           if (index) {
             if (strlen(wd) && index) {
@@ -2430,11 +2452,7 @@ chknext:
                 // preserve mqtt_data
                 char *mqd = (char*)malloc(ResponseSize()+2);
                 if (mqd) {
-#ifdef MQTT_DATA_STRING
-                  strlcpy(mqd, TasmotaGlobal.mqtt_data.c_str(), ResponseSize());
-#else
-                  strlcpy(mqd, TasmotaGlobal.mqtt_data, ResponseSize());
-#endif
+                  strlcpy(mqd, ResponseData(), ResponseSize());
                   wd = mqd;
                   char *lwd = wd;
                   while (index) {
@@ -2556,12 +2574,11 @@ chknext:
           if (!TasmotaGlobal.global_state.wifi_down) {
             // erase nvs
             lp = GetNumericArgument(lp + 4, OPER_EQU, &fvar, gv);
-
-            homekit_main(0, fvar);
-            if (fvar >= 98) {
+            int32_t sel = fvar;
+            fvar = homekit_main(0, sel);
+            if (sel >= 98) {
               glob_script_mem.homekit_running == false;
             }
-
           }
           lp++;
           len = 0;
@@ -3148,6 +3165,21 @@ chknext:
           lp = GetNumericArgument(lp + 5, OPER_EQU, &fvar, gv);
           if (fvar < 1) fvar = 1;
           SML_Decode(fvar - 1);
+          lp++;
+          len = 0;
+          goto exit;
+        }
+        if (!strncmp(vname, "smlv[", 5)) {
+          lp = GetNumericArgument(lp + 5, OPER_EQU, &fvar, gv);
+          if (!fvar) {
+            for (uint8_t cnt = 0; cnt < SML_MAX_VARS; cnt++) {
+              dvalid[cnt] = 0;
+            }
+            fvar = 0;
+          } else {
+            if (fvar < 1) fvar = 1;
+            fvar = dvalid[(uint32_t)fvar - 1];
+          }
           lp++;
           len = 0;
           goto exit;
@@ -4990,11 +5022,7 @@ void ScripterEvery100ms(void) {
     if (ResponseLength()) {
       ResponseJsonStart();
       ResponseJsonEnd();
-#ifdef MQTT_DATA_STRING
-      Run_Scripter(">T", 2, TasmotaGlobal.mqtt_data.c_str());
-#else
-      Run_Scripter(">T", 2, TasmotaGlobal.mqtt_data);
-#endif
+      Run_Scripter(">T", 2, ResponseData());
     }
   }
   if (bitRead(Settings->rule_enabled, 0)) {
@@ -6510,6 +6538,10 @@ char buff[512];
 
   if (sflg) {
 #ifdef USE_DISPLAY_DUMP
+
+#include <renderer.h>
+extern Renderer *renderer;
+
     // screen copy
     #define fileHeaderSize 14
     #define infoHeaderSize 40
@@ -7686,8 +7718,8 @@ uint32_t scripter_create_task(uint32_t num, uint32_t time, uint32_t core, uint32
 #endif // USE_SCRIPT_TASK
 #endif // ESP32
 
-
 int32_t http_req(char *host, char *request) {
+  WiFiClient http_client;
   HTTPClient http;
   int32_t httpCode = 0;
   uint8_t mode = 0;
@@ -7700,34 +7732,48 @@ int32_t http_req(char *host, char *request) {
     request++;
   }
 
+#ifdef HTTP_DEBUG
+  AddLog(LOG_LEVEL_INFO, PSTR("HTTP heap %d"), ESP_getFreeHeap());
+#endif
+
   if (!mode) {
     // GET
     strcat(hbuff, request);
     //AddLog(LOG_LEVEL_INFO, PSTR("HTTP GET %s"),hbuff);
-    http.begin(hbuff);
+    http.begin(http_client, hbuff);
     httpCode = http.GET();
   } else {
     // POST
     //AddLog(LOG_LEVEL_INFO, PSTR("HTTP POST %s - %s"),hbuff, request);
-    http.begin(hbuff);
+    http.begin(http_client, hbuff);
     http.addHeader("Content-Type", "text/plain");
     httpCode = http.POST(request);
   }
 
+#ifdef HTTP_DEBUG
+  AddLog(LOG_LEVEL_INFO, PSTR("HTTP RESULT %s"), http.getString().c_str());
+#endif
+
 #ifdef USE_WEBSEND_RESPONSE
 #ifdef MQTT_DATA_STRING
   TasmotaGlobal.mqtt_data = http.getString();
-  //AddLog(LOG_LEVEL_INFO, PSTR("HTTP RESULT %s"), TasmotaGlobal.mqtt_data.c_str());
-  Run_Scripter(">E", 2, TasmotaGlobal.mqtt_data.c_str());
 #else
   strlcpy(TasmotaGlobal.mqtt_data, http.getString().c_str(), ResponseSize());
-  //AddLog(LOG_LEVEL_INFO, PSTR("HTTP RESULT %s"), TasmotaGlobal.mqtt_data);
-  Run_Scripter(">E", 2, TasmotaGlobal.mqtt_data);
 #endif
+
+#ifdef HTTP_DEBUG
+  AddLog(LOG_LEVEL_INFO, PSTR("HTTP MQTT BUFFER %s"), ResponseData());
+#endif
+
+//  AddLog(LOG_LEVEL_INFO, PSTR("JSON %s"), wd_jstr);
+//  TasmotaGlobal.mqtt_data = wd_jstr;
+  Run_Scripter(">E", 2, ResponseData());
+
   glob_script_mem.glob_error = 0;
 #endif
 
   http.end();
+  http_client.stop();
 
   return httpCode;
 }
@@ -7740,10 +7786,21 @@ int32_t http_req(char *host, char *request) {
 #include <WiFiClientSecure.h>
 #endif //ESP8266
 
+#ifdef TESLA_POWERWALL
+Powerwall powerwall = Powerwall();
+String authCookie   = "";
+#endif
+
 // get tesla powerwall info page json string
 uint32_t call2https(const char *host, const char *path) {
   if (TasmotaGlobal.global_state.wifi_down) return 1;
   uint32_t status = 0;
+
+#ifdef TESLA_POWERWALL
+  authCookie = powerwall.getAuthCookie();
+  return 0;
+#endif
+
 #ifdef ESP32
   WiFiClientSecure *httpsClient;
   httpsClient = new WiFiClientSecure;
@@ -8377,8 +8434,16 @@ bool Xdrv10(uint8_t function)
       if (glob_script_mem.script_ram[0]!='>' && glob_script_mem.script_ram[1]!='D') {
         // clr all
         memset(glob_script_mem.script_ram, 0 ,glob_script_mem.script_size);
+#ifdef PRECONFIGURED_SCRIPT
+        strcpy_P(glob_script_mem.script_ram, PSTR(PRECONFIGURED_SCRIPT));
+#else
         strcpy_P(glob_script_mem.script_ram, PSTR(">D\nscript error must start with >D"));
+#endif
+#ifdef START_SCRIPT_FROM_BOOT
+        bitWrite(Settings->rule_enabled, 0, 1);
+#else
         bitWrite(Settings->rule_enabled, 0, 0);
+#endif
       }
 
       // assure permanent memory is 4 byte aligned
@@ -8423,41 +8488,24 @@ bool Xdrv10(uint8_t function)
       break;
     case FUNC_RULES_PROCESS:
       if (bitRead(Settings->rule_enabled, 0)) {
-#ifdef MQTT_DATA_STRING
 #ifdef USE_SCRIPT_STATUS
-        if (!strncmp_P(TasmotaGlobal.mqtt_data.c_str(), PSTR("{\"Status"), 8)) {
-          Run_Scripter(">U", 2, TasmotaGlobal.mqtt_data.c_str());
+        if (!strncmp_P(ResponseData(), PSTR("{\"Status"), 8)) {
+          Run_Scripter(">U", 2, ResponseData());
         } else {
-          Run_Scripter(">E", 2, TasmotaGlobal.mqtt_data.c_str());
+          Run_Scripter(">E", 2, ResponseData());
         }
 #else
-        Run_Scripter(">E", 2, TasmotaGlobal.mqtt_data.c_str());
+        Run_Scripter(">E", 2, ResponseData());
 #endif
-#else  // MQTT_DATA_STRING
-#ifdef USE_SCRIPT_STATUS
-        if (!strncmp_P(TasmotaGlobal.mqtt_data, PSTR("{\"Status"), 8)) {
-          Run_Scripter(">U", 2, TasmotaGlobal.mqtt_data);
-        } else {
-          Run_Scripter(">E", 2, TasmotaGlobal.mqtt_data);
-        }
-#else
-        Run_Scripter(">E", 2, TasmotaGlobal.mqtt_data);
-#endif
-#endif  // MQTT_DATA_STRING
+
         result = glob_script_mem.event_handeled;
       }
       break;
     case FUNC_TELEPERIOD_RULES_PROCESS:
       if (bitRead(Settings->rule_enabled, 0)) {
-#ifdef MQTT_DATA_STRING
-        if (TasmotaGlobal.mqtt_data.length()) {
-          Run_Scripter(">T", 2, TasmotaGlobal.mqtt_data.c_str());
+        if (ResponseLength()) {
+          Run_Scripter(">T", 2, ResponseData());
         }
-#else
-        if (TasmotaGlobal.mqtt_data[0]) {
-          Run_Scripter(">T", 2, TasmotaGlobal.mqtt_data);
-        }
-#endif
       }
       break;
 #ifdef USE_WEBSERVER

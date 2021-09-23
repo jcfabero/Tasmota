@@ -31,8 +31,8 @@
 #define USE_BLE_ESP32
 #endif
 
-#ifdef ESP32                       // ESP32 only. Use define USE_HM10 for ESP8266 support
-#if CONFIG_IDF_TARGET_ESP32
+#ifdef ESP32                       // ESP32 family only. Use define USE_HM10 for ESP8266 support
+#if defined CONFIG_IDF_TARGET_ESP32 || defined CONFIG_IDF_TARGET_ESP32C3
 #ifdef USE_BLE_ESP32
 
 /*
@@ -3123,7 +3123,7 @@ static void BLEPostMQTTSeenDevices(int type) {
   int remains = 0;
 #ifdef MQTT_DATA_STRING
   ResponseTime_P(PSTR(""));
-  String response_time = TasmotaGlobal.mqtt_data;
+  String response_time = ResponseData();
 
   int maxlen = 1024;
   char dest[maxlen];
@@ -3723,7 +3723,7 @@ void sendExample(){
 
 
 #endif
-#endif  // CONFIG_IDF_TARGET_ESP32
+#endif  // CONFIG_IDF_TARGET_ESP32 or CONFIG_IDF_TARGET_ESP32C3
 #endif  // ESP32
 
 

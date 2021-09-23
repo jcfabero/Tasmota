@@ -58,10 +58,10 @@ const uint8_t kDefaultESP32Timer = 3;
 #if DECODE_AC
 // Hitachi AC is the current largest state size.
 const uint16_t kStateSizeMax = kHitachiAc2StateLength;
-#else
-// Just define something
-const uint16_t kStateSizeMax = 0;
-#endif
+#else  // DECODE_AC
+// Just define something (a uint64_t)
+const uint16_t kStateSizeMax = sizeof(uint64_t);
+#endif  // DECODE_AC
 
 // Types
 
@@ -162,6 +162,9 @@ class IRrecv {
 #if DECODE_HASH
   uint16_t _unknown_threshold;
 #endif
+#ifdef UNIT_TEST
+  volatile irparams_t *_getParamsPtr(void);
+#endif  // UNIT_TEST
   // These are called by decode
   uint8_t _validTolerance(const uint8_t percentage);
   void copyIrParams(volatile irparams_t *src, irparams_t *dst);
@@ -305,6 +308,12 @@ class IRrecv {
                      const uint16_t nbits = kSanyoAcBits,
                      const bool strict = true);
 #endif  // DECODE_SANYO_AC
+#if DECODE_SANYO_AC88
+  bool decodeSanyoAc88(decode_results *results,
+                       uint16_t offset = kStartOffset,
+                       const uint16_t nbits = kSanyoAc88Bits,
+                       const bool strict = true);
+#endif  // DECODE_SANYO_AC88
 #if DECODE_MITSUBISHI
   bool decodeMitsubishi(decode_results *results, uint16_t offset = kStartOffset,
                         const uint16_t nbits = kMitsubishiBits,
@@ -497,6 +506,11 @@ class IRrecv {
                     const uint16_t nbits = kTrotecBits,
                     const bool strict = true);
 #endif  // DECODE_TROTEC
+#if DECODE_TROTEC_3550
+  bool decodeTrotec3550(decode_results *results, uint16_t offset = kStartOffset,
+                        const uint16_t nbits = kTrotecBits,
+                        const bool strict = true);
+#endif  // DECODE_TROTEC_3550
 #if DECODE_MIDEA
   bool decodeMidea(decode_results *results, uint16_t offset = kStartOffset,
                    const uint16_t nbits = kMideaBits,
@@ -561,6 +575,12 @@ class IRrecv {
                           const uint16_t nbits = kHaierACYRW02Bits,
                           const bool strict = true);
 #endif
+#if DECODE_HAIER_AC176
+  bool decodeHaierAC176(decode_results *results,
+                        uint16_t offset = kStartOffset,
+                        const uint16_t nbits = kHaierAC176Bits,
+                        const bool strict = true);
+#endif  // DECODE_HAIER_AC176
 #if (DECODE_HITACHI_AC || DECODE_HITACHI_AC2 || DECODE_HITACHI_AC344)
   bool decodeHitachiAC(decode_results *results, uint16_t offset = kStartOffset,
                        const uint16_t nbits = kHitachiAcBits,
@@ -733,6 +753,19 @@ class IRrecv {
   bool decodeTruma(decode_results *results, uint16_t offset = kStartOffset,
                    const uint16_t nbits = kTrumaBits, const bool strict = true);
 #endif  // DECODE_TRUMA
+#if DECODE_TEKNOPOINT
+  bool decodeTeknopoint(decode_results *results, uint16_t offset = kStartOffset,
+                        const uint16_t nbits = kTeknopointBits,
+                        const bool strict = true);
+#endif  // DECODE_TEKNOPOINT
+#if DECODE_KELON
+  bool decodeKelon(decode_results *results, uint16_t offset = kStartOffset,
+                   const uint16_t nbits = kKelonBits, const bool strict = true);
+#endif  // DECODE_KELON
+#if DECODE_BOSE
+  bool decodeBose(decode_results *results, uint16_t offset = kStartOffset,
+                  const uint16_t nbits = kBoseBits, const bool strict = true);
+#endif  // DECODE_BOSE
 };
 
 #endif  // IRRECV_H_

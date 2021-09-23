@@ -1,5 +1,61 @@
 # Release Notes
 
+## _v2.7.20 (20210828)_
+
+**[Bug Fixes]**
+- Make `strToSwingH()` match "Right Max" (#1550 #1551)
+
+**[Features]**
+- Experimental Bose remote support (#1579)
+- Added MitsubishiAC VaneLeft (#1572 #1576)
+- HAIER_AC176: Add experimental detailed support (#1480 #1571)
+- Detailed support for Tornado/Sanyo 88-bit A/C protocol (#1503 #1568)
+- Add support for new `TROTEC_3550` A/C protocol (#1563 #1566 #1507)
+- SamsungAc: Use `sendExtended()` going forward. (#1484 #1562)
+- SamsungAc: Redo/fix checksum calculations. (#1538 #1554)
+- LG: Add support for `AKB73757604` model (#1531 #1545)
+- Daikin176: Add support for Unit Id. (#1543 #1544)
+- Daikin2: Add support for Humidity setting/operation. (#1535 #1540)
+- TCL112AC: Add support for quiet/mute setting. (#1528 #1529)
+- LG2: Add Fan speed, Swing, & Light support for new `AKB74955603` model (#1513 #1530)
+- Add Mitsubishi AC "fan only" mode (#1527)
+
+**[Misc]**
+- Change when some github workflows run (#1583)
+- Add/update supported device info (#1580 #1581 #1585)
+- Fix pylint issues due to pylint update. (#1569 #1570)
+- DAIKIN216: Update supported models. (#1552 #1567)
+- IRMQTTServer: Build a minimal OTA image via PlatformIO. (#1513 #1541)
+- Reduce memory fragmentation cause by String usage. (#1493 #1536)
+- Refactor `decodeMitsubishiAC()` (#1523 #1532)
+- Fix incorrect comment.
+- Migrate from Travis to GitHub Actions (#1522 #1526)
+- Documentation update with additional supported Panasonic AC models (#1525)
+
+
+## _v2.7.19 (20210706)_
+
+**[Bug Fixes]**
+- Illegal Heap write in rawbuf when the capture has overflowed. (#1516 #1517)
+- PANASONIC_AC: Fix Low and High fan speeds (#1515)
+- Fix MDNS in IRServer and IRMQTTServer example code (#1498 #1499)
+- IRac: Fix off-by-one error in Coolix's sleep setting. (#1500)
+- Fix undefined constant (#1490)
+
+**[Features]**
+- Add detailed support for Kelon ACs (#1494)
+- Experimental basic support for Teknopoint A/C protocol (#1486 #1504)
+- Daikin64: Add support for Heat mode (#1492)
+- Basic support for `HAIER_AC176` 176 bit protocol. (#1480 #1481)
+
+**[Misc]**
+- GREE: Update inter-message gap timing (#1508 #1509)
+- IRac: Change Coolix to send special messages after a normal message. (#1501 #1502)
+- Fix compiler warnings causing Travis failures. (#1491)
+- Update supported model info (#1477 #1485 #1488 #1489)
+- Add HTML viewport meta tag to IRServer and IRMQTTServer examples (#1467 #1469)
+
+
 ## _v2.7.18 (20210420)_
 
 **[Misc]**
