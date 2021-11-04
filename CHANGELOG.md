@@ -3,7 +3,51 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - Development
 
-## [9.5.0.8]
+## [10.0.0.1]
+### Added
+- Berry add module ``python_compat`` to be closer to Python syntax (#13428)
+- 1 second heartbeat GPIO
+
+### Changed
+- File editor no-wrap (#13427)
+- ESP32 core library from v1.0.7.4 to v1.0.7.5
+- ESP32C3 core library from v2.0.0-post to v2.0.1-rc1
+
+### Fixed
+- Initial reset RTC memory based variables like EnergyToday and EnergyTotal
+- ESP32 Telegram compile error (#13435)
+- SML compile error (#13441)
+- GUI checkbox MQTT TLS not saved regression from v9.2.0.3 (#13442)
+
+## [Released]
+
+## [10.0.0] 20211019
+- Release Norman
+
+## [9.5.0.9] 20211019
+### Added
+- Command ``SetOption129 1`` to enable split total energy results (#13030)
+- Command ``SetOption130 1`` adding heap size (and ESP32 fragmentation) to logging timestamp for debugging
+- Commands ``EnergyTotal<phase>``, ``EnergyToday<phase>`` and ``EnergyYesterday<phase>`` to (re)set energy values
+- Commands ``EnergyUsage`` and ``EnergyExport`` to (re)set energy usage and export values
+- Berry add module ``import persist``
+- Support for BL0942 energy monitor (#13259)
+- Support for HM330X SeedStudio Grove Particule sensor (#13250)
+
+### Breaking Changed
+- ESP32 LVGL updated to v8.0.2
+
+### Changed
+- Removed command ``EnergyReset`` as it is replaced by new commands
+- Files starting with underscore in file system are no more hidden
+- ESP32 Memory display to exclude IRAM (i.e. less by 40-50KB) (#13294)
+- LVGL Berry namespace ``lv.*`` added and removed ``lv_*`` constants
+
+### Fixed
+- ESP32 restore GPIO16/17 if no PSRAM was found regression from v9.5.0.3
+- Restore functionality as documented when both GPIO_LED1 and GPIO_LED2 are used regression from v8.5.0 (#13368)
+
+## [9.5.0.8] 20210927
 ### Added
 - Command ``WebGetConfig <url>`` if ``#define USE_WEBGETCONFIG`` is enabled to restore/init configuration from external webserver (#13034)
 - Berry class ``webclient`` for HTTP/HTTPS requests
@@ -14,6 +58,8 @@ All notable changes to this project will be documented in this file.
 - Berry support for Serial
 - Support for Sensirion SCD40/SCD41 CO2 sensor (#13139)
 - Support for BL0939 energy monitor as used in ESP32 based Sonoff Dual R3 V2 Pow (#13195)
+- Command ``WebQuery <url> GET|POST|PUT|PATCH [<headers>] <body>`` to extent HTTP requests (#13209)
+- Berry print stack trace when exception, more detailed with line numbers if `#define USE_BERRY_DEBUG`
 
 ### Changed
 - M5 Stack Core2 uses UNIVERSAL_DISPLAY with enabled LVGL as default now
@@ -21,6 +67,7 @@ All notable changes to this project will be documented in this file.
 - Minimum PWM Frequency lowered to 2Hz on ESP32 (#13123)
 - Use Tasmota Arduino Core32 1.0.7.4 for ESP32 builds (#13154)
 - Shrinked Webcam build, uses now `USE_TASMOTA_DISCOVERY` (#13148)
+- Berry revamped ``energy`` module to expose all C variables to Berry (read/write)
 
 ### Fixed
 - OpenTherm invalid JSON (#13028)
@@ -160,8 +207,6 @@ All notable changes to this project will be documented in this file.
 - NO VALID JSON regression from may 4th (#12440)
 - Telegram response decoding stopped working after 20210621 and exception on long result message (#12451)
 - Neopool compile error on DEBUG_TASMOTA_SENSOR (#12464)
-
-## [Released]
 
 ## [9.5.0] 20210617
 - Release Michael (Rossi)

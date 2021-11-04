@@ -93,6 +93,10 @@ void ResponseCmndFloat(float value, uint32_t decimals) {
   Response_P(PSTR("{\"%s\":%*_f}"), XdrvMailbox.command, decimals, &value);  // Return float value without quotes
 }
 
+void ResponseCmndIdxFloat(float value, uint32_t decimals) {
+  Response_P(PSTR("{\"%s%d\":%*_f}"), XdrvMailbox.command, XdrvMailbox.index, decimals, &value);  // Return float value without quotes
+}
+
 void ResponseCmndIdxNumber(int value) {
   Response_P(S_JSON_COMMAND_INDEX_NVALUE, XdrvMailbox.command, XdrvMailbox.index, value);
 }
@@ -908,7 +912,7 @@ bool SetoptionDecode(uint32_t index, uint32_t *ptype, uint32_t *pindex) {
       *ptype = 4;
       *pindex = index -82;      // 0 .. 31
     }
-    else {                                 // SetOption114 .. 145 = Settings->flag5
+    else {                      // SetOption114 .. 145 = Settings->flag5
       *ptype = 5;
       *pindex = index -114;     // 0 .. 31
     }

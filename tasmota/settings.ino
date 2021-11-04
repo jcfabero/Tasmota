@@ -38,13 +38,32 @@ uint32_t GetRtcSettingsCrc(void) {
 void RtcSettingsSave(void) {
   RtcSettings.baudrate = Settings->baudrate * 300;
   if (GetRtcSettingsCrc() != rtc_settings_crc) {
-    RtcSettings.valid = RTC_MEM_VALID;
+
+    if (RTC_MEM_VALID != RtcSettings.valid) {
+      memset(&RtcSettings, 0, sizeof(RtcSettings));
+      RtcSettings.valid = RTC_MEM_VALID;
+      RtcSettings.energy_kWhtoday = Settings->energy_kWhtoday;
+      RtcSettings.energy_kWhtotal = Settings->energy_kWhtotal;
+      for (uint32_t i = 0; i < 3; i++) {
+        RtcSettings.energy_kWhtoday_ph[i] = Settings->energy_kWhtoday_ph[i];
+        RtcSettings.energy_kWhtotal_ph[i] = Settings->energy_kWhtotal_ph[i];
+      }
+      RtcSettings.energy_usage = Settings->energy_usage;
+      for (uint32_t i = 0; i < MAX_COUNTERS; i++) {
+        RtcSettings.pulse_counter[i] = Settings->pulse_counter[i];
+      }
+      RtcSettings.power = Settings->power;
+  //    RtcSettings.baudrate = Settings->baudrate * 300;
+      RtcSettings.baudrate = APP_BAUDRATE;
+    }
+
 #ifdef ESP8266
     ESP.rtcUserMemoryWrite(100, (uint32_t*)&RtcSettings, sizeof(RtcSettings));
 #endif  // ESP8266
 #ifdef ESP32
     RtcDataSettings = RtcSettings;
 #endif  // ESP32
+
     rtc_settings_crc = GetRtcSettingsCrc();
   }
 }
@@ -60,20 +79,8 @@ bool RtcSettingsLoad(uint32_t update) {
   bool read_valid = (RTC_MEM_VALID == RtcSettings.valid);
   if (update) {
     if (!read_valid) {
-      memset(&RtcSettings, 0, sizeof(RtcSettings));
-      RtcSettings.valid = RTC_MEM_VALID;
-      RtcSettings.energy_kWhtoday = Settings->energy_kWhtoday;
-      RtcSettings.energy_kWhtotal = Settings->energy_kWhtotal;
-      RtcSettings.energy_usage = Settings->energy_usage;
-      for (uint32_t i = 0; i < MAX_COUNTERS; i++) {
-        RtcSettings.pulse_counter[i] = Settings->pulse_counter[i];
-      }
-      RtcSettings.power = Settings->power;
-  //    RtcSettings.baudrate = Settings->baudrate * 300;
-      RtcSettings.baudrate = APP_BAUDRATE;
       RtcSettingsSave();
     }
-    rtc_settings_crc = GetRtcSettingsCrc();
   }
   return read_valid;
 }
@@ -283,11 +290,11 @@ void UpdateQuickPowerCycle(bool update) {
 
 void EmergencyReset(void) {
   Serial.begin(115200);
-  Serial.write(0xAA);
-  Serial.write(0x55);
+  Serial.write(0xA5);
+  Serial.write(0x5A);
   delay(1);
   if (Serial.available() == 2) {
-    if ((Serial.read() == 0xAA) && (Serial.read() == 0x55)) {
+    if ((Serial.read() == 0xA5) && (Serial.read() == 0x5A)) {
       SettingsErase(3);       // Reset all settings including QuickPowerCycle flag
 
       do {                    // Wait for user to remove Rx Tx jumper and power cycle
@@ -298,7 +305,13 @@ void EmergencyReset(void) {
       ESP_Restart();          // Restart to init default settings
     }
   }
-  while (Serial.available()) { Serial.read(); }  // Flush input buffer
+  Serial.println();
+  Serial.flush();
+#ifdef ESP32
+  delay(10);                  // Allow time to cleanup queues - if not used hangs ESP32
+  Serial.end();
+  delay(10);                  // Allow time to cleanup queues - if not used hangs ESP32
+#endif  // ESP32
 }
 #endif  // USE_EMERGENCY_RESET
 
@@ -675,10 +688,15 @@ void SettingsLoad(void) {
     }
   }
 #endif  // ESP8266
+
 #ifdef ESP32
   uint32_t source = SettingsRead(Settings, sizeof(TSettings));
-  if (source) { settings_location = 1; }
-  AddLog(LOG_LEVEL_NONE, PSTR(D_LOG_CONFIG "Loaded from %s, " D_COUNT " %lu"), (source)?"File":"Nvm", Settings->save_flag);
+  if (source) {
+    settings_location = 1;
+    if (Settings->cfg_holder == (uint16_t)CFG_HOLDER) {
+      AddLog(LOG_LEVEL_NONE, PSTR(D_LOG_CONFIG "Loaded from %s, " D_COUNT " %lu"), (source)?"File":"Nvm", Settings->save_flag);
+    }
+  }
 #endif  // ESP32
 
 #ifndef FIRMWARE_MINIMAL
@@ -1431,6 +1449,10 @@ void SettingsDelta(void) {
 #else
       Settings->flag5.disable_referer_chk |= true;
 #endif
+    }
+    if (Settings->version < 0x09050009) {
+      memset(&Settings->energy_kWhtoday_ph, 0, 36);
+      memset(&RtcSettings.energy_kWhtoday_ph, 0, 24);
     }
 
     Settings->version = VERSION;
